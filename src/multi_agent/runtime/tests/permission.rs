@@ -234,13 +234,15 @@ async fn build_child_runtime_excludes_root_level_tools() {
 
 // ── SourcedApprovalHandler (design 2026-09-19 D4) ──
 
-/// D4：SourcedApprovalHandler 填充 source、不覆盖已有值、Err 透传。
+/// D4: `SourcedApprovalHandler` fills in `source`, never overwrites an existing
+/// value, and passes `Err` through.
 mod sourced_handler {
     use std::sync::Arc;
 
     use agent_base::{ApprovalDecision, ApprovalHandler, ApprovalRequest, RiskLevel};
 
-    /// 记录收到的请求；`fail` 为 true 时返回 Err（测透传）。
+    /// Records the requests it receives; returns `Err` when `fail` is true
+    /// (tests pass-through).
     struct RecordingHandler {
         seen: std::sync::Mutex<Vec<ApprovalRequest>>,
         fail: bool,
@@ -310,7 +312,8 @@ mod sourced_handler {
         h.approve(req, tokio_util::sync::CancellationToken::new())
             .await
             .unwrap();
-        // 内部 handler 看到的仍是原值——包装器只在 None 时填充。
+        // The inner handler still sees the original value — the wrapper only
+        // fills in when it is None.
         assert_eq!(
             inner.seen.lock().unwrap()[0].source.as_deref(),
             Some("root/other")

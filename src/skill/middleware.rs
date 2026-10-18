@@ -54,8 +54,10 @@ impl Middleware for SkillCatalogRefreshMiddleware {
                 // LLM call.
                 *content = super::catalog::refresh_catalog(content, &catalog);
             }
-            // 静默跳过会掩盖接线错误：skills 已装配、catalog 却从不刷新，
-            // 模型看到的目录会悄悄过期——这是难以察觉的回归，至少留日志。
+            // Silently skipping would mask wiring errors: skills are assembled
+            // yet the catalog never refreshes, and the catalog the model sees
+            // quietly goes stale — a regression that is hard to notice, so at
+            // least leave a log.
             _ => tracing::warn!(
                 "skill catalog refresh skipped: first message is not System \
                  (skills are loaded but the catalog cannot be refreshed)"
@@ -100,8 +102,9 @@ mod tests {
         }
     }
 
-    /// builder 产物的等价构造：base + "\n\n" + catalog —— 宿主应用在 build()
-    /// 时就是这样把 catalog 组进存盘 system prompt 的。
+    /// Equivalent construction of the builder's output: base + "\n\n" + catalog —
+    /// this is how the host app composes the catalog into the stored system
+    /// prompt at build() time.
     fn stored_prompt(resolver: &SkillResolver) -> String {
         format!("{BASE}\n\n{}", render_catalog(resolver).unwrap())
     }
@@ -186,8 +189,9 @@ mod tests {
 
     // ── Catalog duplication regression (build-time M1 × per-turn M3a) ──
     //
-    // build() 已经把 catalog 组进存盘的 system prompt；middleware 必须先
-    // 换旧再注入，而不是再追加一份（模型每次 LLM 调用曾看到两份目录）。
+    // build() already composed the catalog into the stored system prompt; the
+    // middleware must swap the old one out before injecting, not append another
+    // copy (the model used to see two catalogs on every LLM call).
 
     #[tokio::test]
     async fn refresh_strips_builder_embedded_catalog_instead_of_duplicating() {
@@ -195,7 +199,8 @@ mod tests {
         make_skill_dir(tmp.path(), "alpha", "alpha body");
         let resolver = Arc::new(SkillResolver::from_dirs(&[tmp.path().join("skills")]));
 
-        // 真实接线：builder 存进 session 的就是含 catalog 的 prompt
+        // Real wiring: what the builder stores into the session is the prompt
+        // with the catalog in it
         let stored = stored_prompt(&resolver);
         assert!(stored.contains("## Skills"));
 
@@ -222,8 +227,9 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_preserves_trailing_sections_after_catalog() {
-        // token-budget 类宿主：prompt suffix 以 push_str 直接拼在 catalog 之后
-        // （suffix 自带 \n\n 前导），刷新旧目录时不得吃掉它后面的内容。
+        // token-budget-style hosts: the prompt suffix is push_str'd straight
+        // after the catalog (the suffix carries its own \n\n lead-in); refreshing
+        // the old catalog must not swallow what follows it.
         let tmp = tempfile::tempdir().unwrap();
         make_skill_dir(tmp.path(), "alpha", "alpha body");
         let resolver = Arc::new(SkillResolver::from_dirs(&[tmp.path().join("skills")]));
@@ -266,7 +272,7 @@ mod tests {
             _ => panic!(),
         };
 
-        // 第二次调用（下一个 LLM call，messages 来自 session 的重新 clone）
+        // Second call (the next LLM call; messages re-cloned from the session)
         let mut ctx2 = make_pre_llm_ctx(&after_first);
         mw.on_pre_llm(&mut ctx2).await.unwrap();
 
@@ -282,7 +288,8 @@ mod tests {
         }
     }
 
-    // ── 非 System 开头的健壮性：跳过 + 告警日志，不 panic、不误改 ──
+    // ── Robustness when the first message is not System: skip + warn log,
+    //    no panic, no mis-edit ──
 
     #[tokio::test]
     async fn non_system_first_message_left_untouched() {

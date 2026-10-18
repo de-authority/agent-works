@@ -34,9 +34,11 @@ impl Clone for SkillTelemetry {
         Self {
             slash_count: AtomicU32::new(self.slash_count.load(Ordering::Relaxed)),
             model_count: AtomicU32::new(self.model_count.load(Ordering::Relaxed)),
-            // 毒化恢复（unwrap_or_else into_inner）：某线程持锁 panic 后锁进
-            // 入 poisoned 态，这里读到的只是上一次写入的 skill 名——拿旧值
-            // 远好于让 Clone 沿调用链炸掉整个会话。
+            // Poison recovery (unwrap_or_else into_inner): after a thread panics
+            // while holding the lock, the lock enters the poisoned state, and all
+            // that is read here is the last written skill name — keeping the stale
+            // value is far better than letting Clone blow up the whole session
+            // along the call chain.
             last_slash_name: std::sync::Mutex::new(
                 self.last_slash_name
                     .lock()
@@ -91,7 +93,7 @@ impl SkillTelemetry {
     /// Session-level counters are NOT reset — they accumulate for the
     /// final `set_session_custom` call.
     pub fn snapshot_and_reset(&self) -> serde_json::Value {
-        // 毒化恢复：与 Clone 同理，telemetry 崩不得——拿残值继续。
+        // Poison recovery: as with Clone, telemetry must not crash — carry on with the leftover value.
         let slash = self
             .last_slash_name
             .lock()

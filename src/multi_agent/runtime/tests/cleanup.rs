@@ -118,7 +118,7 @@ async fn child_cleanup_panic_releases_all_resources() {
     // The provider panics inside run_turn; the panic unwinds through the
     // task future and ChildCleanup::drop fires during the unwind — the
     // same single path as normal exit, no explicit panic hook needed
-    // (review B-2: 三路收敛到一处).
+    // (review B-2: three paths converge into one).
     poll_until("panic unwind", || {
         limiter.current() == 0 && registry.lock().unwrap().count() == 0
     })
@@ -178,7 +178,7 @@ async fn concurrency_gate_failure_rolls_back_registry() {
         "unexpected error: {err}"
     );
 
-    // §3.3 "任一失败逆序归还": a rejected gate-3 slot must undo the
+    // §3.3 "undo in reverse order on any failure": a rejected gate-3 slot must undo the
     // gate-2 registry entry and leak no mailbox.
     assert_eq!(ma.limiter.current(), 1, "failed spawn holds no extra slot");
     assert_eq!(ma.registry.lock().unwrap().count(), 1);

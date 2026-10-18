@@ -6,7 +6,7 @@
 //! byte-compatible with Claude Code's auto-memory, so both tools read and
 //! write the same directory with zero migration.
 //!
-//! Layering (docs/phase9-plan.md "框架分层设计"):
+//! Layering (docs/phase9-plan.md "Framework Layering Design"):
 //! - This module owns the *mechanism*: frontmatter (de)serialization, atomic
 //!   file writes, row-level index sync, and a `std::sync::Mutex` serializing
 //!   index read-modify-write within the process (file IO inside the critical

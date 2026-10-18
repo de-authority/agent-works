@@ -506,7 +506,7 @@ impl McpServer {
             format!("{}\n\n{}", result_text, thought_texts.join("\n"))
         } else {
             format!(
-                "{}\n\n工具调用:\n{}\n\n思考过程:\n{}",
+                "{}\n\nTool calls:\n{}\n\nThought process:\n{}",
                 result_text,
                 tool_summary.join("\n"),
                 thought_texts.join("\n")

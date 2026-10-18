@@ -1,0 +1,237 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "phimint plugin.json (schemaVersion 1)",
+  "$comment": "工具插座契约 P0 资产。字段受 agent-plugins.org / 各家 plugin.json 启发，v1 为自有 schema（逐字段 diff 完成前不宣称兼容）。演进走 schemaVersion，不原地改语义。",
+  "type": "object",
+  "required": ["schemaVersion", "name", "version", "tools"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "清单格式版本，v1 只接受 1。"
+    },
+    "name": {
+      "description": "插件名。[a-z0-9_-]{1,32}；保留字 mcp/script/plugin（撞保留字安装拒绝）。身份键前缀 plugin.{name}.。",
+      "allOf": [
+        { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
+        { "not": { "enum": ["mcp", "script", "plugin"] } }
+      ]
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "作者自报版本（推荐 semver）。安装完整性以清单哈希为准，不以此字段为准。"
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "description": "本插件贡献的工具。每个工具一个身份键 plugin.{name}.{工具段}。",
+      "items": { "$ref": "#/definitions/tool" }
+    },
+    "skills": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "插件内 skill 根目录（相对插件根，每目录含子目录+SKILL.md，目录名=frontmatter name）。合并优先级：项目 > 用户 > 插件。",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "definitions": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,32}$"
+    },
+    "parameters": {
+      "type": "object",
+      "description": "参数简表：参数名 → {type, description?}。仅标量。注册时转换为 LLM 的 JSON Schema 信封（type: object + properties + required=全部）；run 里的 ${param} 缺失或非标量 → 该次 tool error（fail-closed）。",
+      "additionalProperties": { "$ref": "#/definitions/parameter" }
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": ["string", "number", "boolean"],
+          "description": "仅标量。复杂入参请拆参数或走 MCP 形态。"
+        },
+        "description": {
+          "type": "string",
+          "description": "给模型看的说明。"
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "description": "能力白名单条目（fail-closed，未声明=不给）。仅 wasm 形态。paths/hosts 在安装时刻解析/规范化并钉进 registry，加载时按钉死值收紧。",
+      "properties": {
+        "type": {
+          "enum": ["fs:read", "net:http"]
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "fs:read 必填（WASI preopen 是路径域的：不给 preopen=读不了，给 /=全给）。相对路径相对插件目录，安装时刻解析成绝对路径。"
+        },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "net:http 必填（主机白名单）。出站请求时刻过滤，不在白名单=拒。"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": { "type": { "const": "fs:read" } },
+          "required": ["type", "paths"],
+          "not": { "required": ["hosts"] }
+        },
+        {
+          "properties": { "type": { "const": "net:http" } },
+          "required": ["type", "hosts"],
+          "not": { "required": ["paths"] }
+        }
+      ]
+    },
+    "server": {
+      "type": "object",
+      "description": "包内 MCP server（stdio command 或远程 URL）。server 归插件所有：加载时注册、plugin remove 时移除，不写 connections.json。条目 name 是 server 标签；该 server 暴露的每个工具一个 plugin.{plugin}.{工具名} 键。env/headers 的值只以 ${ENV:VAR} 引用 secret（见 secret 规则）。",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "stdio 形态：argv 数组，不经 shell。包内相对路径在安装时刻解析成绝对路径并钉死（与 run[0] 同一条防顶替法律）。"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "stdio 形态环境变量覆盖（继承 + 覆盖）。值支持 ${ENV:VAR}。"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://",
+          "description": "远程 URL 形态。"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "远程 URL 形态请求头。值支持 ${ENV:VAR}。"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["command"],
+          "not": { "anyOf": [{ "required": ["url"] }, { "required": ["headers"] }] }
+        },
+        {
+          "required": ["url"],
+          "not": { "anyOf": [{ "required": ["command"] }, { "required": ["env"] }] }
+        }
+      ]
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "form"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/identifier",
+          "description": "工具名（身份键 tool 段）。插件内 MCP 形态的 name 是 server 标签，不是工具名；server 工具名装载时规范化（小写、非法字符→-、截 32；撞名加数字后缀），UI 显示 server 原始名。"
+        },
+        "form": {
+          "enum": ["wasm", "script", "mcp"],
+          "description": "wasm=进程内沙箱；script=argv spawn；mcp=包内 MCP server（多语言的答案）。"
+        },
+        "description": {
+          "type": "string",
+          "description": "给模型看的说明（wasm/script 必填；mcp 由 server 提供）。"
+        },
+        "exposure": {
+          "enum": ["direct", "deferred"],
+          "description": "工具表预算，默认 direct。机制复用 ToolExposure::{Direct,Deferred,Hidden}。"
+        },
+        "parameters": {
+          "$ref": "#/definitions/parameters",
+          "description": "wasm/script 的参数简表（mcp 由 server 的 inputSchema 提供）。"
+        },
+        "timeout_secs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "超时。默认：wasm 30s、script 60s。超时杀整棵进程树（script）或 epoch interruption 切断（wasm）。"
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1,
+          "description": "wasm 形态：组件路径（相对插件根）。WIT world phi:tool@0.1.0。"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/capability" },
+          "description": "wasm 形态：能力白名单（fail-closed，未声明=不给）。"
+        },
+        "run": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "script 形态：argv 数组，逐元素替换 ${param}，不经 shell。包内相对路径安装时刻钉成绝对路径。"
+        },
+        "server": {
+          "$ref": "#/definitions/server",
+          "description": "mcp 形态：包内 MCP server。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "form": { "const": "wasm" } },
+            "required": ["form"]
+          },
+          "then": {
+            "required": ["module", "description"],
+            "not": {
+              "anyOf": [{ "required": ["run"] }, { "required": ["server"] }]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "form": { "const": "script" } },
+            "required": ["form"]
+          },
+          "then": {
+            "required": ["run", "description"],
+            "not": {
+              "anyOf": [
+                { "required": ["module"] },
+                { "required": ["server"] },
+                { "required": ["capabilities"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "form": { "const": "mcp" } },
+            "required": ["form"]
+          },
+          "then": {
+            "required": ["server"],
+            "not": {
+              "anyOf": [
+                { "required": ["module"] },
+                { "required": ["run"] },
+                { "required": ["capabilities"] },
+                { "required": ["parameters"] },
+                { "required": ["description"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

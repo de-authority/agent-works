@@ -133,9 +133,7 @@ mod tests {
     fn http_config(name: &str, url: &str) -> McpServerConfig {
         McpServerConfig {
             name: name.to_string(),
-            transport: McpTransport::Http {
-                url: url.to_string(),
-            },
+            transport: McpTransport::http(url),
             auto_reconnect: false,
         }
     }

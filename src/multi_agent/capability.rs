@@ -1,32 +1,40 @@
-//! 子 agent 工具能力解析（设计文档 2026-09-19 D2/D3/D5）。
+//! Child agent tool capability resolution (design doc 2026-09-19 D2/D3/D5).
 //!
-//! LLM 只选择工具面（能调什么），永远不选择审批语义（D1 正交）。
-//! 本模块是排除规则的**单一编码点**：原 `build_child_runtime_with_config`
-//! 的排除集构造（含 Manual 合并）迁入 [`resolve_capability`]，输出的
-//! `excluded_tools` 由注册循环逐字消费——循环零改动，改的是门内的名单。
+//! The LLM only selects the tool surface (what can be called), never the
+//! approval semantics (D1 is orthogonal). This module is the **single encoding
+//! point** for the exclusion rules: the exclusion-set construction from the
+//! original `build_child_runtime_with_config` (including the Manual merge) is
+//! moved into [`resolve_capability`], and its `excluded_tools` output is
+//! consumed verbatim by the registration loop — the loop is untouched; what
+//! changes is the roster inside the gate.
 //!
-//! 规则（与载体无关）：写能力 = `write_tools` 成员豁免自己在排除表中的
-//! 条目；`read_only` = `write_tools` 强制并入排除集（有牙的真只读）。
+//! Rules (carrier-independent): write capability = `write_tools` members
+//! exempt their own entries in the exclusion table; `read_only` =
+//! `write_tools` are forcibly merged into the exclusion set (a real read-only
+//! with teeth).
 
 use std::collections::BTreeSet;
 
 use super::config::AgentAutonomy;
 use super::preset::ChildPreset;
 
-/// spawn 请求的语义能力（schema 层的 `tools` 参数映射到这里）。
+/// Semantic capability of a spawn request (the schema-level `tools` parameter
+/// maps here).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChildToolCapability {
-    /// 强制真只读：write_tools 并入排除集。
+    /// Enforced true read-only: write_tools merged into the exclusion set.
     ReadOnly,
-    /// 请求写能力：write_tools 成员从排除集中豁免。
+    /// Write capability requested: write_tools members exempted from the
+    /// exclusion set.
     Write,
-    /// 命名 preset：展开其白名单 + 角色 prompt（未知名由工具层先校验，
-    /// 此处兜底为只读，无 panic 路径）。
+    /// Named preset: expands its whitelist + role prompt (unknown names are
+    /// validated first at the tool layer; here it falls back to read-only,
+    /// with no panic path).
     Preset(&'static str),
 }
 
 impl ChildToolCapability {
-    /// 回显标签（spawn 输出 message 用）。
+    /// Echo label (used in the spawn output message).
     pub fn label(&self) -> String {
         match self {
             Self::ReadOnly => "read_only".to_string(),
@@ -36,26 +44,30 @@ impl ChildToolCapability {
     }
 }
 
-/// 能力解析结果。降级不走 Result 错误通道——降级是成功解析附带说明。
+/// Capability resolution result. Degradation does not go through the Result
+/// error channel — degradation is a note attached to a successful resolution.
 #[derive(Debug, Clone, Default)]
 pub struct CapabilityResolution {
-    /// per-spawn 调整后的排除集（注册循环原样消费）。
+    /// Per-spawn adjusted exclusion set (consumed verbatim by the registration
+    /// loop).
     pub excluded_tools: BTreeSet<String>,
-    /// preset 白名单（None = 不设白名单，沿用 ChildConfig.tool_names）。
+    /// Preset whitelist (None = no whitelist set; keep ChildConfig.tool_names).
     pub tool_names: Option<BTreeSet<String>>,
-    /// preset 角色 prompt（拼在脚手架之前）。
+    /// Preset role prompt (prepended before the scaffold).
     pub role_prompt: Option<String>,
-    /// preset 的 max_turns。
+    /// The preset's max_turns.
     pub max_turns: Option<u32>,
-    /// 降级原因（Some = 本次写请求被降级为只读）。
+    /// Degradation reason (Some = this write request was degraded to
+    /// read-only).
     pub degraded_reason: Option<String>,
 }
 
-/// 能力解析（纯函数，单元可测）。
+/// Capability resolution (pure function, unit-testable).
 ///
-/// `requested = None` 是遗留程序化路径（ChildBuilder / 旧 spawn_*）：
-/// 完全跳过能力层，排除集与升级前逐字相同。LLM 面的 spawn 传
-/// `Some`（schema 缺省 read_only）。
+/// `requested = None` is the legacy programmatic path (ChildBuilder / old
+/// spawn_*): it skips the capability layer entirely, and the exclusion set is
+/// byte-for-byte identical to before the upgrade. The LLM-facing spawn passes
+/// `Some` (schema default is read_only).
 pub fn resolve_capability(
     requested: Option<&ChildToolCapability>,
     autonomy: AgentAutonomy,
@@ -63,7 +75,8 @@ pub fn resolve_capability(
     child_excluded_tools: &[String],
     write_tools: &[String],
 ) -> CapabilityResolution {
-    // 第一道闸：Manual 合并（与升级前一致，能力层无法越过它）。
+    // First gate: the Manual merge (identical to before the upgrade; the
+    // capability layer cannot bypass it).
     let base: BTreeSet<String> = if autonomy == AgentAutonomy::Manual {
         child_excluded_tools
             .iter()
@@ -75,14 +88,15 @@ pub fn resolve_capability(
     };
 
     let Some(cap) = requested else {
-        // 遗留程序化路径：无能力层，base 原样（Auto 不并 write_tools）。
+        // Legacy programmatic path: no capability layer, base as-is
+        // (Auto does not merge write_tools).
         return CapabilityResolution {
             excluded_tools: base,
             ..Default::default()
         };
     };
 
-    // preset 展开：白名单 + 角色 prompt + max_turns。
+    // Preset expansion: whitelist + role prompt + max_turns.
     let (tool_names, role_prompt, max_turns, preset_wants_write) = match cap {
         ChildToolCapability::Preset(name) => match ChildPreset::by_name(name) {
             Some(preset) => {
@@ -99,7 +113,8 @@ pub fn resolve_capability(
                     wants,
                 )
             }
-            // 工具层已校验名字；这里兜底为只读（无 panic 路径）。
+            // The tool layer already validated the name; fall back to
+            // read-only here (no panic path).
             None => (None, None, None, false),
         },
         _ => (None, None, None, false),
@@ -110,16 +125,16 @@ pub fn resolve_capability(
         ChildToolCapability::Preset(_) => preset_wants_write,
         ChildToolCapability::ReadOnly => false,
     };
-    // Manual 永不批准；Auto 下看部署开关。
+    // Manual never approves; under Auto, consult the deployment switch.
     let permitted = wants_write && autonomy == AgentAutonomy::Auto && allow_child_write;
 
     let excluded_tools = if permitted {
-        // 写豁免：write_tools 成员从排除集中移除。
+        // Write exemption: remove write_tools members from the exclusion set.
         base.into_iter()
             .filter(|t| !write_tools.contains(t))
             .collect()
     } else {
-        // 只读强制：write_tools 并入排除集。
+        // Read-only enforcement: merge write_tools into the exclusion set.
         let mut set = base;
         for t in write_tools {
             set.insert(t.clone());
@@ -134,7 +149,7 @@ pub fn resolve_capability(
     } else if !allow_child_write {
         Some("allow_child_write=false; request degraded to read-only".to_string())
     } else {
-        None // wants_write 且 Auto 且 allow ⇒ permitted，不可达
+        None // wants_write and Auto and allow ⇒ permitted, unreachable
     };
 
     CapabilityResolution {
@@ -146,11 +161,14 @@ pub fn resolve_capability(
     }
 }
 
-/// read-only nudge 三条件（设计文档 D3.1，per-child 纯函数）：
-/// `autonomy == Manual`（强制，压倒一切）
-/// || `child_read_only`（强制全员 nudge 的偏执开关，默认开——框架默认部署
-///    与今日行为逐字相同）
-/// || 解析后排除集仍含全部 write_tools（子 agent 实际无写工具）。
+/// The three read-only nudge conditions (design doc D3.1, per-child pure
+/// function):
+/// `autonomy == Manual` (forced, overrides everything)
+/// || `child_read_only` (paranoid switch that forces the nudge on everyone,
+///    default on — the framework's default deployment is byte-for-byte
+///    identical to today's behavior)
+/// || the resolved exclusion set still contains all write_tools (the child
+///    agent effectively has no write tools).
 pub fn read_only_nudge(
     autonomy: AgentAutonomy,
     child_read_only: bool,
@@ -176,8 +194,9 @@ mod tests {
         excluded(WRITE_TOOLS)
     }
 
-    /// None（遗留路径）：Auto 不并 write_tools —— 与升级前逐字相同
-    /// （preset fixture 回归哨兵的前提）。
+    /// None (legacy path): Auto does not merge write_tools — byte-for-byte
+    /// identical to before the upgrade (the precondition of the preset
+    /// fixture regression sentinel).
     #[test]
     fn none_capability_keeps_legacy_base_set() {
         let res = resolve_capability(None, AgentAutonomy::Auto, false, &[], &write_tools());
@@ -194,7 +213,7 @@ mod tests {
         }
     }
 
-    /// read_only 强制化（v3）：Auto 下也并入 write_tools。
+    /// read_only enforcement (v3): write_tools merged in even under Auto.
     #[test]
     fn read_only_forces_write_tools_into_exclusion() {
         let res = resolve_capability(
@@ -209,7 +228,9 @@ mod tests {
         }
     }
 
-    /// 写能力 + 允许：write_tools 成员从排除集豁免（含部署表里误入的）。
+    /// Write capability + allowed: write_tools members exempted from the
+    /// exclusion set (including ones mistakenly listed in the deployment
+    /// table).
     #[test]
     fn write_permitted_exempt_write_tools() {
         let table = excluded(&["write_file", "task_output"]);
@@ -225,10 +246,14 @@ mod tests {
         assert!(!res.excluded_tools.contains("edit_file"));
         assert!(!res.excluded_tools.contains("execute_command"));
         assert!(res.degraded_reason.is_none());
-        assert!(res.tool_names.is_none(), "write 不产生白名单");
+        assert!(
+            res.tool_names.is_none(),
+            "write must not produce a whitelist"
+        );
     }
 
-    /// 写能力 + 部署关闭：降级为只读 + 原因。
+    /// Write capability + deployment disabled: degraded to read-only +
+    /// reason.
     #[test]
     fn write_denied_by_flag_degrades_with_reason() {
         let res = resolve_capability(
@@ -248,7 +273,8 @@ mod tests {
         );
     }
 
-    /// Manual 优先级最高：写请求被压回只读 + 原因。
+    /// Manual has the highest priority: a write request is pushed back to
+    /// read-only + reason.
     #[test]
     fn write_denied_by_manual_autonomy() {
         let res = resolve_capability(
@@ -265,7 +291,8 @@ mod tests {
         assert!(why.contains("Manual"), "{why}");
     }
 
-    /// preset（含写工具）+ 允许：白名单展开，排除集豁免写成员。
+    /// Preset (containing write tools) + allowed: the whitelist expands, and
+    /// the exclusion set exempts write members.
     #[test]
     fn preset_with_write_tools_permitted_expands() {
         let res = resolve_capability(
@@ -284,8 +311,8 @@ mod tests {
         assert!(res.degraded_reason.is_none());
     }
 
-    /// preset（含写工具）+ 关闭：白名单保留角色（其中的写条目由 §5.4
-    /// warn+drop 拦下）。
+    /// Preset (containing write tools) + disabled: the whitelist keeps the
+    /// role (its write entries are blocked by the §5.4 warn+drop).
     #[test]
     fn preset_with_write_tools_denied_degrades() {
         let res = resolve_capability(
@@ -295,14 +322,15 @@ mod tests {
             &[],
             &write_tools(),
         );
-        assert!(res.tool_names.is_some(), "preset 角色保留");
+        assert!(res.tool_names.is_some(), "preset keeps its role");
         assert!(res.degraded_reason.is_some());
         for t in WRITE_TOOLS {
             assert!(res.excluded_tools.contains(*t));
         }
     }
 
-    /// 只读 preset（researcher）：等价 read_only 的排除集语义。
+    /// Read-only preset (researcher): exclusion-set semantics equivalent to
+    /// read_only.
     #[test]
     fn read_only_preset_forces_read_only_exclusion() {
         let res = resolve_capability(
@@ -315,7 +343,10 @@ mod tests {
         for t in WRITE_TOOLS {
             assert!(res.excluded_tools.contains(*t));
         }
-        assert!(res.degraded_reason.is_none(), "只读请求无降级");
+        assert!(
+            res.degraded_reason.is_none(),
+            "a read-only request never degrades"
+        );
         assert_eq!(res.max_turns, Some(32));
     }
 
@@ -326,35 +357,38 @@ mod tests {
         assert_eq!(ChildToolCapability::Preset("coder").label(), "preset:coder");
     }
 
-    /// D3.1：nudge 三条件（per-child，依据解析器输出的排除集）。
+    /// D3.1: the nudge's three conditions (per-child, based on the resolver's
+    /// output exclusion set).
     #[test]
     fn nudge_three_conditions() {
         let read_only_excluded: BTreeSet<String> =
             WRITE_TOOLS.iter().map(|s| s.to_string()).collect();
         let write_exempted: BTreeSet<String> = ["task_output".to_string()].into_iter().collect();
 
-        // 条件一：Manual 强制。
+        // Condition 1: Manual forces it.
         assert!(super::read_only_nudge(
             AgentAutonomy::Manual,
             false,
             &write_exempted,
             &write_tools()
         ));
-        // 条件二：child_read_only 偏执开关（默认部署路径）。
+        // Condition 2: the child_read_only paranoid switch (default
+        // deployment path).
         assert!(super::read_only_nudge(
             AgentAutonomy::Auto,
             true,
             &write_exempted,
             &write_tools()
         ));
-        // 条件三：解析后排除集仍含全部 write_tools（子 agent 实际无写工具）。
+        // Condition 3: the resolved exclusion set still contains all
+        // write_tools (the child agent effectively has no write tools).
         assert!(super::read_only_nudge(
             AgentAutonomy::Auto,
             false,
             &read_only_excluded,
             &write_tools()
         ));
-        // 写子 agent（豁免后）：无 nudge。
+        // Write child agent (after exemption): no nudge.
         assert!(!super::read_only_nudge(
             AgentAutonomy::Auto,
             false,

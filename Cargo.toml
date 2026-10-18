@@ -1,6 +1,6 @@
 [package]
 name = "agent-works"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 description = "Batteries-included Agent toolbox built on agent-base"
 license = "MIT"
@@ -30,11 +30,13 @@ loom-check = ["dep:loom"]
 # Persistent auto-memory (Phase 9b): memory_* tools + index injection.
 # Claude Code compatible storage (~/.claude/projects/<slug>/memory/).
 memory = ["serde_yaml", "dep:dirs"]
-full = ["mcp", "skill", "cli", "prompt_skill", "yaml_skill", "hot-reload", "focus", "multi_agent", "compression", "memory"]
+# Plugin wasm form: wasmtime component runtime (WIT phi:tool@0.1.0).
+wasm = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:http"]
+full = ["mcp", "skill", "cli", "prompt_skill", "yaml_skill", "hot-reload", "focus", "multi_agent", "compression", "memory", "wasm"]
 fuzzing = ["mcp", "skill", "prompt_skill", "multi_agent"]
 
 [dependencies]
-agent-base = { version = "0.9.0" }
+agent-base = { version = "0.10.0" }
 async-trait = "0.1"
 dyn-clone = "1"
 futures-core = "0.3"
@@ -50,6 +52,26 @@ dirs = { version = "5", optional = true }
 notify = { version = "7", optional = true, default-features = false, features = ["macos_kqueue"] }
 loom = { version = "0.7", optional = true }
 
+# 插件 wasm 形态（WIT `phi:tool@0.1.0` 组件运行时；`wasm` feature）
+# wasmtime-wasi：WASI 0.2 能力收紧（fs preopen 只给钉死路径）
+# wasmtime-wasi-http：出站 HTTP（宿主按钉死 hosts 白名单过滤）
+wasmtime = { version = "49", optional = true }
+wasmtime-wasi = { version = "49", optional = true }
+wasmtime-wasi-http = { version = "49", optional = true }
+# wasi:http 钩子签名里的 Request/Uri（宿主 net 白名单过滤面）
+http = { version = "1", optional = true }
+
+# 安装完整性哈希（manifest / .wasm 钉死值）
+sha2 = "0.10"
+# 压缩包解压（plugin add 归档通道；解压做 zip-slip 路径检查）
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# 脚本档树杀（POSIX 进程组 killpg）；Windows 走 taskkill /T /F，无需 libc。
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
@@ -58,6 +80,11 @@ serial_test = "3"
 tokio-util = "0.7"
 wiremock = "0.6"
 proptest = "1"
+jsonschema = "0.58"
+wit-parser = "0.262.0"
+# wasm 形态 net 白名单钩子测试：构造 http::Request<WasiBody>
+bytes = "1"
+http-body-util = "0.1"
 
 [[bench]]
 name = "agent_builder"

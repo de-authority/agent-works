@@ -1,6 +1,8 @@
-//! 能力解析器的接线测试（设计文档 v3 外部声音发现 1 的回归锁）：
-//! "write 子 agent 能注册 write_file" 是**集成断言**——验证 build 路径
-//! 逐字消费解析器输出的排除集，而不是单元断言。
+//! Wiring tests for the capability resolver (regression lock for design doc
+//! v3 external voice finding 1):
+//! "a write child agent can register write_file" is an **integration
+//! assertion** — it verifies that the build path consumes the resolver's
+//! output exclusion set verbatim, not a unit assertion.
 
 use std::sync::Arc;
 
@@ -68,8 +70,9 @@ fn runtime_with_config(
     ))
 }
 
-/// THE integration assertion: write 子 agent 的注册集确实含 write_file
-/// （Auto + allow，部署排除表里虽有 write_file，但被写豁免救回）。
+/// THE integration assertion: the write child agent's registration set does
+/// contain write_file (Auto + allow; write_file is in the deployment
+/// exclusion table but is rescued by the write exemption).
 #[tokio::test(flavor = "multi_thread")]
 async fn write_capability_child_registers_write_file() {
     let ma = runtime_with_config(
@@ -96,8 +99,9 @@ async fn write_capability_child_registers_write_file() {
     assert!(registered.contains("read_file"));
 }
 
-/// CRITICAL 回归镜像（框架侧）：默认 spawn（Some(ReadOnly) —— LLM 面缺省）
-/// 注册集不含任何写工具。
+/// CRITICAL regression mirror (framework side): the default spawn
+/// (Some(ReadOnly) — the LLM-facing default) registers a set that contains no
+/// write tools.
 #[tokio::test(flavor = "multi_thread")]
 async fn default_spawn_child_never_registers_write_tools() {
     let ma = runtime_with_config(
@@ -124,7 +128,8 @@ async fn default_spawn_child_never_registers_write_tools() {
     assert!(registered.contains("read_file"));
 }
 
-/// 遗留路径（capability=None）字节不变式：write_file 被部署排除表拦下。
+/// Legacy path (capability=None) byte-invariant: write_file is blocked by the
+/// deployment exclusion table.
 #[tokio::test(flavor = "multi_thread")]
 async fn legacy_path_still_excludes_by_table() {
     let ma = runtime_with_config(
@@ -145,8 +150,10 @@ async fn legacy_path_still_excludes_by_table() {
     );
 }
 
-/// 解析器输出的排除集与 build 消费的一致性（框架层 CRITICAL 断言）：
-/// phimint 形状的部署表下，ReadOnly 解析后的排除集覆盖全部写工具。
+/// Consistency between the resolver's output exclusion set and what build
+/// consumes (framework-level CRITICAL assertion): under a phimint-shaped
+/// deployment table, the post-ReadOnly-resolution exclusion set covers all
+/// write tools.
 #[test]
 fn read_only_resolution_covers_all_write_tools() {
     let table: Vec<String> = ["write_file", "task_output"]
@@ -170,11 +177,13 @@ fn read_only_resolution_covers_all_write_tools() {
     assert!(res.excluded_tools.contains("task_output"));
 }
 
-/// spawn 级回显（外部声音发现 9）：write 请求在 allow=false 部署下携带
-/// 降级原因；allowed 时 registered_tools 含 write_file。
+/// Spawn-level echo (external voice finding 9): a write request in an
+/// allow=false deployment carries the degradation reason; when allowed,
+/// registered_tools contains write_file.
 #[tokio::test(flavor = "multi_thread")]
 async fn spawn_echo_carries_registered_and_degradation() {
-    // allowed 部署：echo.registered_tools 含 write_file，无降级。
+    // Allowed deployment: echo.registered_tools contains write_file, no
+    // degradation.
     let ma = runtime_with_config(
         write_enabled_config(AgentAutonomy::Auto, true),
         Arc::new(StreamingStub),
@@ -195,7 +204,7 @@ async fn spawn_echo_carries_registered_and_degradation() {
     assert!(echo.degraded_reason.is_none());
     ma.close_agent(&echo.agent_path).unwrap();
 
-    // 关闭部署：降级原因回显。
+    // Disabled deployment: the degradation reason is echoed.
     let ma2 = runtime_with_config(
         write_enabled_config(AgentAutonomy::Auto, false),
         Arc::new(StreamingStub),
@@ -217,8 +226,9 @@ async fn spawn_echo_carries_registered_and_degradation() {
     ma2.close_agent(&echo2.agent_path).unwrap();
 }
 
-/// T8 接线断言：list_agents 回显每个子 agent 实际注册的工具集；close 后
-/// 条目随 ChildCleanup::drop 消失（与写门同一终局清理点）。
+/// T8 wiring assertion: list_agents echoes the tool set actually registered
+/// by each child agent; after close, the entry disappears along with
+/// ChildCleanup::drop (the same final cleanup point as the write gate).
 #[tokio::test(flavor = "multi_thread")]
 async fn list_agents_echoes_spawned_tools_and_close_clears_them() {
     let ma = runtime_with_config(

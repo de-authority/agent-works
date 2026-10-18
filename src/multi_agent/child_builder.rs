@@ -34,7 +34,7 @@ pub struct ChildBuilder {
     /// Legacy `fork_history` route — deliberately **not** a `ChildConfig`
     /// field: the parent session id is per-call tool-layer knowledge
     /// (`ToolContext::session_id`), not spawn-template knowledge, so it
-    /// lives on the builder alone (design §7.5 "零新增字段" preserved).
+    /// lives on the builder alone (design §7.5 "no new fields" preserved).
     fork: Option<(String, SessionId)>,
 }
 
@@ -120,7 +120,7 @@ impl ChildBuilder {
     }
 
     /// Inherit parent conversation history — the legacy `fork_history`
-    /// parameter surfaced on the builder (§8.2 "旧行为一版不少": the tool
+    /// parameter surfaced on the builder (§8.2 "no legacy behavior lost in one release": the tool
     /// schema kept promising it, and the production wiring does have a
     /// session manager). `mode` is `"none"` | `"all"` | a number N of last
     /// turns; `parent_session` is the calling agent's session

@@ -259,7 +259,8 @@ mod tests {
             out.contains("SKILL.md"),
             "must include path for read_file continuation: {out}"
         );
-        // 截断摘录 + 提示整体不得超出 max_output_chars——pipeline 会拒绝超限输出。
+        // The truncated excerpt + hint must not exceed max_output_chars overall —
+        // the pipeline rejects over-limit output.
         assert!(
             out.chars().count() <= MAX_SKILL_BODY_CHARS,
             "overflow output must stay within the budget: {}",
@@ -295,7 +296,7 @@ mod tests {
 
     #[tokio::test]
     async fn not_found_listing_caps_at_20_with_omitted_count() {
-        // 22 个 skill：报错时只列 20 个名字 + "(+2 more)"。
+        // 22 skills: on error only 20 names are listed + "(+2 more)".
         let tmp = tempfile::tempdir().unwrap();
         let names: Vec<String> = (0..22).map(|i| format!("skill-{i:02}")).collect();
         for name in &names {

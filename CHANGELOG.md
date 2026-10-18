@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-18
+
+### Added
+- **Tool provider contract** — `tool_provider.rs` plus the `phi-tool.wit`
+  interface (WIT + Component Model) and `schemas/plugin.schema.json`: one
+  contract behind three external tool shapes (MCP servers, user scripts, wasm
+  plugin packs).
+- **Plugin packs** (`src/plugin/`): wasmtime-based wasm loading, an integrity
+  registry pinning installed packs, and an install/remove lifecycle.
+- **Script tools** (`src/script_tool.rs`): user scripts run as tools;
+  `${ENV:VAR}` references are pre-resolved at registration and a missing
+  variable is named on the spot.
+- **Approval ledger plumbing** (`src/approval_ledger.rs`): identity-keyed
+  external tool tiers via `is_external_identity_key` (the `mcp.` / `script.` /
+  `plugin.` prefixes), fail-closed.
+- **Multi-agent**: child spawn sets exclude the external tool namespaces
+  (warn + drop a reduced set), so external tools stay root-only.
+
+### Fixed
+- **MCP Streamable HTTP now works**: the full handshake runs once
+  (initialize + notifications/initialized), `Mcp-Session-Id` is captured and
+  replayed on every request, and SSE `data:` frames are parsed. Servers that
+  refuse `tools/list` without a session (e.g. Taobao desktop) now expose their
+  tools.
+- A connection that discovers 0 tools reports ⚠ instead of a green check, and
+  `attach` no longer swallows a discovery failure into a silent 0-tool success
+  — the real cause is surfaced and the change rolled back.
+- MCP child processes are spawned detached from the controlling terminal and
+  stderr, fixing a TUI hard freeze when a child clobbered the tty.
+- Script tools whose file is missing (or not executable on unix) are refused
+  at install/mount time instead of installing silently.
+
 ## [0.10.0] - 2026-10-07
 
 ### Added

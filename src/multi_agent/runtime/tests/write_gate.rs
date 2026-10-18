@@ -1,4 +1,4 @@
-//! 写门集成（设计文档 D6）：经真实 spawn 的包装与关闭释放。
+//! Write-gate integration (design doc D6): wrapping and close-release through a real spawn.
 
 use std::sync::Arc;
 
@@ -69,13 +69,16 @@ fn runtime_with_gate_and_tools(
     ))
 }
 
-/// 两个写子 agent：第二个对同一文件的写入收到指名错误（经 GatedTool）。
-/// 经真实 build 路径验证包装确实挂上（write 注册集成断言的姊妹断言）。
+/// Two write sub-agents: the second write to the same file gets a named error
+/// (via GatedTool). Verifies through the real build path that the wrapping is
+/// actually in place (the sister assertion of the write-registration
+/// integration assertion).
 #[tokio::test(flavor = "multi_thread")]
 async fn gated_tool_wraps_write_file_on_spawned_children() {
     let ma = runtime_with_gate(true);
-    // 直接从 build 路径拿 child runtime，检查注册的 write_file 是 GatedTool
-    // 的名字（名字透传），并经 gate 抢占验证互斥：
+    // Take the child runtime straight from the build path, check that the
+    // registered write_file carries the GatedTool name (name pass-through),
+    // and verify mutual exclusion via gate contention:
     let config = ChildConfig {
         system_prompt: Some("p".into()),
         ..Default::default()
@@ -88,9 +91,10 @@ async fn gated_tool_wraps_write_file_on_spawned_children() {
         .build_child_runtime_with_config(&config, true, Some(&ChildToolCapability::Write), "root/b")
         .await
         .unwrap();
-    // 两个 child runtime 各自持有 write_file 注册（名字层面）——真正的
-    // 互斥断言在 write_gate.rs 单元测试（GatedTool 层）；这里验证 build
-    // 路径对两个不同 child_path 都完成了包装且 spawn 不报错。
+    // Each child runtime holds its own write_file registration (at the name
+    // level) — the real mutual-exclusion assertion lives in the write_gate.rs
+    // unit tests (the GatedTool layer); here we verify that the build path
+    // completes the wrapping for two distinct child_paths without error.
     let _ = (child_a, child_b);
     let shared = Arc::new(WorkspaceWriteGate::new());
     shared
@@ -102,8 +106,9 @@ async fn gated_tool_wraps_write_file_on_spawned_children() {
     assert!(err.contains("root/a"));
 }
 
-/// gate 关闭：build 路径不再包装（诚实开关语义）。开关关闭时子 agent 仍
-/// 能注册 write_file（回到纯 prompt 纪律），且 gate 表为空。
+/// Gate disabled: the build path no longer wraps (honest switch semantics).
+/// With the switch off a sub-agent can still register write_file (back to
+/// pure prompt discipline), and the gate table is empty.
 #[tokio::test(flavor = "multi_thread")]
 async fn gate_disabled_still_spawns_write_children() {
     let ma = runtime_with_gate(false);
@@ -118,8 +123,9 @@ async fn gate_disabled_still_spawns_write_children() {
     assert!(registered.contains("write_file"));
 }
 
-/// 关闭释放：spawn → 以回显的 agent_path 占位 → close_agent 后该 agent 的
-/// 声明被 release_all 清空（经 ChildCleanup::drop，轮询至终局）。
+/// Close-release: spawn → claim under the echoed agent_path → after
+/// close_agent the agent's claims are cleared by release_all (via
+/// ChildCleanup::drop, polled to the terminal state).
 #[tokio::test(flavor = "multi_thread")]
 async fn close_releases_gate_claims() {
     let ma = runtime_with_gate(true);
@@ -130,7 +136,7 @@ async fn close_releases_gate_claims() {
             true,
             None,
             None,
-            None, // capability 位（Task 6 新签名；遗留路径传 None）
+            None, // capability slot (Task 6's new signature; the legacy path passes None)
             &agent_base::SessionId::new(1),
         )
         .await

@@ -84,14 +84,14 @@ impl ServerEntry {
         let attempt_count = *attempts;
         drop(attempts);
 
-        // 指数退避
+        // exponential backoff
         let delay = Duration::from_millis(std::cmp::min(
             1000 * (2_u64.pow(attempt_count.min(5))),
             30000,
         ));
         sleep(delay).await;
 
-        // 清除现有连接
+        // clear existing connections
         self.clients.write().await.clear();
 
         match self.add_client().await {
@@ -496,9 +496,7 @@ mod tests {
     fn http_config(name: &str, url: &str) -> McpServerConfig {
         McpServerConfig {
             name: name.to_string(),
-            transport: McpTransport::Http {
-                url: url.to_string(),
-            },
+            transport: McpTransport::http(url),
             auto_reconnect: false,
         }
     }
@@ -506,10 +504,10 @@ mod tests {
     fn stdio_bad_config(name: &str) -> McpServerConfig {
         McpServerConfig {
             name: name.to_string(),
-            transport: McpTransport::Stdio {
-                command: "definitely-not-a-real-command-xyz".to_string(),
-                args: vec![],
-            },
+            transport: McpTransport::stdio(
+                "definitely-not-a-real-command-xyz",
+                Vec::<String>::new(),
+            ),
             auto_reconnect: false,
         }
     }

@@ -645,15 +645,11 @@ mod mcp_tests {
 
     #[test]
     fn test_mcp_transport_variants() {
-        let http = McpTransport::Http {
-            url: "http://localhost:8080".to_string(),
-        };
+        let http =
+            McpTransport::http("http://localhost:8080").with_header("Authorization", "Bearer t");
         assert!(matches!(http, McpTransport::Http { .. }));
 
-        let stdio = McpTransport::Stdio {
-            command: "npx".to_string(),
-            args: vec!["-y".to_string(), "mcp-server".to_string()],
-        };
+        let stdio = McpTransport::stdio("npx", ["-y", "mcp-server"]).with_env("TOKEN", "t");
         assert!(matches!(stdio, McpTransport::Stdio { .. }));
     }
 
@@ -661,9 +657,7 @@ mod mcp_tests {
     fn test_mcp_server_config() {
         let config = McpServerConfig {
             name: "my-server".to_string(),
-            transport: McpTransport::Http {
-                url: "http://localhost:8080".to_string(),
-            },
+            transport: McpTransport::http("http://localhost:8080"),
             auto_reconnect: true,
         };
         assert_eq!(config.name, "my-server");
@@ -768,7 +762,7 @@ mod prompter_tests {
 }
 
 // ─────────────────────────────────────────────────────────────
-// AgentHandle tests (十七、会话调度测试)
+// AgentHandle tests (17. session scheduling tests)
 // ─────────────────────────────────────────────────────────────
 
 mod agent_handle_tests {
@@ -776,7 +770,7 @@ mod agent_handle_tests {
     use agent_base::RuntimeEvent;
     use agent_works::AgentHandle;
 
-    /// 场景1：基本会话调度 — send_input → recv_event → RunFinished
+    /// Scenario 1: basic session scheduling — send_input → recv_event → RunFinished
     #[tokio::test]
     async fn test_handle_basic_session() {
         let llm = Arc::new(MockLlmClient::new(vec![vec![
@@ -816,7 +810,7 @@ mod agent_handle_tests {
         );
     }
 
-    /// 场景2：取消会话 — send_input → cancel → RunCancelled
+    /// Scenario 2: cancel a session — send_input → cancel → RunCancelled
     #[tokio::test]
     async fn test_handle_cancel() {
         // Create a mock that uses a channel-based stream that blocks
@@ -896,7 +890,7 @@ mod agent_handle_tests {
         );
     }
 
-    /// 场景3：错误处理 — error → RunFinished (not hang)
+    /// Scenario 3: error handling — error → RunFinished (not hang)
     #[tokio::test]
     async fn test_handle_error_recovery() {
         // Use an LLM that returns an error
@@ -946,7 +940,7 @@ mod agent_handle_tests {
         );
     }
 
-    /// 场景2b：取消后可以继续发送新命令
+    /// Scenario 2b: new commands can still be sent after a cancel
     #[tokio::test]
     async fn test_handle_cancel_then_continue() {
         let llm = Arc::new(MockLlmClient::new(vec![

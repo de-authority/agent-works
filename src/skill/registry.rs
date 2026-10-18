@@ -138,7 +138,7 @@ impl SkillRegistry {
 
         let plan = UpdatePlanArgs {
             objective: Some(objective),
-            explanation: Some(format!("从技能模板 '{}' 生成", name)),
+            explanation: Some(format!("generated from skill template '{}'", name)),
             plan: steps,
         };
 

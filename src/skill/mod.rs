@@ -100,7 +100,7 @@ pub trait Skill: Send + Sync {
         ""
     }
 
-    // ── Agent Skills 开放标准字段 (agentskills.io) ──
+    // ── Agent Skills open standard fields (agentskills.io) ──
 
     /// Tools allowed when this skill is active (empty = all tools allowed).
     fn allowed_tools(&self) -> &[String] {

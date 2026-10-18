@@ -1,14 +1,18 @@
-//! 子 agent 间文件级写互斥（设计 2026-09-19 D6）。
+//! File-level write mutual exclusion between sub-agents (design 2026-09-19 D6).
 //!
-//! 进程内 Mutex 表：CanonicalPath → 持有者 agent_path。**任务期持有**——
-//! 声明在子 agent 生命周期内有效（不是单次调用期），第二个子 agent 一写
-//! 就得到指名错误，向父报告，父重新分界。`try_claim` 永不阻塞：无等待即
-//! 无死锁面。释放钩子挂在 `ChildCleanup::drop`（正常 close / panic /
-//! abort 全走这一处）；超时 reaper 不释放（agent 存活，声明继续有效）。
+//! In-process Mutex table: CanonicalPath → owning agent_path. **Held for the
+//! task duration** — a claim is valid for the sub-agent's lifetime (not a
+//! single call), and the second sub-agent that tries to write gets a named
+//! error, reports it to the parent, and the parent re-partitions. `try_claim`
+//! never blocks: no waiting means no deadlock surface. The release hook hangs
+//! off `ChildCleanup::drop` (normal close / panic / abort all go through this
+//! one spot); the timeout reaper does not release (the agent survives, its
+//! claims stay valid).
 //!
-//! 诚实边界：`execute_command` 的 shell 重定向在门外——gate 只包
-//! `write_file`/`edit_file` 主通道（框架已知的注册名），shell 通道靠任务
-//! 分界纪律 + 父 prompt 指引。
+//! Honest boundary: `execute_command`'s shell redirection is outside the
+//! gate — the gate only wraps the `write_file`/`edit_file` main channels
+//! (framework-known registered names); the shell channel relies on
+//! task-partitioning discipline + parent prompt guidance.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,7 +20,7 @@ use std::sync::{Arc, Mutex};
 
 use agent_base::{Content, Tool, ToolContext};
 
-/// gate 拦截的工具（框架已知的注册名，设计 D6）。
+/// Tools intercepted by the gate (framework-known registered names, design D6).
 pub const WRITE_GATE_TOOLS: &[&str] = &["write_file", "edit_file"];
 
 /// Claim key: a stable spelling that does not depend on whether the file
@@ -57,10 +61,11 @@ fn stable_key(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-/// 进程内写门。一个
+/// In-process write gate. One
 /// [`MultiAgentRuntime`](crate::multi_agent::runtime::MultiAgentRuntime)
-/// 一个实例（跨子 agent 共享才能互斥）；父 agent 豁免（gate 只包子
-/// agent 的工具实例）。
+/// instance per runtime (it must be shared across sub-agents for mutual
+/// exclusion); the parent agent is exempt (the gate only wraps sub-agents'
+/// tool instances).
 #[derive(Default)]
 pub struct WorkspaceWriteGate {
     holders: Mutex<HashMap<PathBuf, String>>,
@@ -71,8 +76,8 @@ impl WorkspaceWriteGate {
         Self::default()
     }
 
-    /// 空闲 → 占用并 Ok；已被自己持有 → 幂等 Ok；他人持有 → 立即
-    /// Err（指名，不不等待）。
+    /// Free → claim it and Ok; already held by self → idempotent Ok; held by
+    /// another → immediate Err (named, no waiting).
     pub fn try_claim(&self, path: &Path, agent: &str) -> Result<(), String> {
         let canonical = stable_key(path);
         let mut holders = self.holders.lock().unwrap();
@@ -86,7 +91,7 @@ impl WorkspaceWriteGate {
         }
     }
 
-    /// agent 关闭路径调用：释放它持有的全部声明。
+    /// Called on the agent's close path: releases every claim it holds.
     pub fn release_all(&self, agent: &str) {
         self.holders
             .lock()
@@ -105,8 +110,9 @@ impl WorkspaceWriteGate {
     }
 }
 
-/// 包装写工具：调用前 `try_claim(args.path, agent_path)`，失败即指名错误
-/// （子 agent 向父报告冲突，父重新分界——响亮失败，非阻塞）。
+/// Wraps a write tool: `try_claim(args.path, agent_path)` before the call; on
+/// failure a named error (the sub-agent reports the conflict to the parent,
+/// which re-partitions — fail loud, non-blocking).
 pub struct GatedTool {
     inner: Arc<dyn Tool>,
     gate: Arc<WorkspaceWriteGate>,
@@ -249,7 +255,11 @@ mod tests {
         let ctx = ToolContext::for_test();
         wrapped.call(&args("tmp/x.txt"), &ctx).await.unwrap();
         wrapped.call(&args("tmp/x.txt"), &ctx).await.unwrap();
-        assert_eq!(tool.calls.load(Ordering::SeqCst), 2, "自己重入幂等放行");
+        assert_eq!(
+            tool.calls.load(Ordering::SeqCst),
+            2,
+            "self re-entry passes idempotently"
+        );
     }
 
     #[tokio::test]

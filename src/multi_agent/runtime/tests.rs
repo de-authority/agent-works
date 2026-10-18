@@ -161,6 +161,28 @@ fn make_ma_runtime() -> Arc<MultiAgentRuntime> {
     make_ma_runtime_with(Arc::new(StreamingStub))
 }
 
+/// Business tools + per-deployment exclusion (used by the whitelist and
+/// external-tool scenarios).
+fn make_runtime_with_tools(
+    business_tools: Vec<Arc<dyn Tool>>,
+    excluded: Vec<String>,
+) -> Arc<MultiAgentRuntime> {
+    let config = MultiAgentConfig {
+        child_excluded_tools: excluded,
+        ..MultiAgentConfig::enabled()
+    };
+    Arc::new(MultiAgentRuntime::new(
+        config,
+        Arc::new(StreamingStub),
+        business_tools,
+        tokio_util::sync::CancellationToken::new(),
+        None,
+        agent_base::Language::En,
+        None,
+        None,
+    ))
+}
+
 struct NoopReadFileTool;
 
 #[async_trait::async_trait]
@@ -293,6 +315,7 @@ mod capability;
 mod cleanup;
 mod control;
 mod denied;
+mod external;
 mod fork;
 mod lifecycle;
 mod outcome;

@@ -52,11 +52,11 @@ impl ChildPreset {
     pub fn researcher() -> Self {
         Self {
             name: "researcher",
-            description: "代码研究/分析，只读",
+            description: "Code research/analysis, read-only",
             config: ChildConfig {
                 system_prompt: Some(
-                    "你是一个代码研究专家。分析代码结构、理解逻辑、\
-                     发现模式；只读，把发现写进最终回答。"
+                    "You are a code research expert. Analyze code structure, understand logic, \
+                     and discover patterns; read-only, write your findings into the final answer."
                         .into(),
                 ),
                 tool_names: Some(tools(&[tool::READ_FILE, tool::LIST_FILES])),
@@ -70,11 +70,11 @@ impl ChildPreset {
     pub fn coder() -> Self {
         Self {
             name: "coder",
-            description: "代码编写与修改",
+            description: "Code writing and modification",
             config: ChildConfig {
                 system_prompt: Some(
-                    "你是一个代码编写专家。根据需求编写高质量代码，\
-                     改动最小化。"
+                    "You are a code writing expert. Write high-quality code to the requirements, \
+                     keeping changes minimal."
                         .into(),
                 ),
                 tool_names: Some(tools(&[
@@ -94,11 +94,11 @@ impl ChildPreset {
     pub fn reviewer() -> Self {
         Self {
             name: "reviewer",
-            description: "代码评审，只读",
+            description: "Code review, read-only",
             config: ChildConfig {
                 system_prompt: Some(
-                    "你是一个代码评审专家。审查正确性、风格与安全问题；\
-                     只读，把评审意见写进最终回答。"
+                    "You are a code review expert. Review for correctness, style, and security \
+                     issues; read-only, write your review comments into the final answer."
                         .into(),
                 ),
                 tool_names: Some(tools(&[tool::READ_FILE, tool::LIST_FILES])),
@@ -112,11 +112,11 @@ impl ChildPreset {
     pub fn tester() -> Self {
         Self {
             name: "tester",
-            description: "测试编写与执行",
+            description: "Test authoring and execution",
             config: ChildConfig {
                 system_prompt: Some(
-                    "你是一个测试专家。为代码编写测试并执行，\
-                     报告通过/失败与覆盖率。"
+                    "You are a testing expert. Write tests for the code and execute them; \
+                     report pass/fail and coverage."
                         .into(),
                 ),
                 tool_names: Some(tools(&[
@@ -170,7 +170,7 @@ mod tests {
     use crate::multi_agent::runtime::MultiAgentRuntime;
 
     // Fixture asserting tool::* constants are real, registerable names (§6.1:
-    // "每个常量必须能在集成 fixture 里注册上"). A constant that drifted from
+    // "every constant must be registerable in the integration fixture"). A constant that drifted from
     // phi-kernel-tools would make the whitelist validation fail with
     // ToolNotFound here — the spawn below is the assertion.
     struct NamedTool(&'static str);

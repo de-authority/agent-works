@@ -303,7 +303,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn cas_conservation_thousand_mixed_commit_rollback() {
-        // §12 stage-2 acceptance: 千次并发 reserve/commit/回滚,终值精确。
+        // §12 stage-2 acceptance: a thousand concurrent reserve/commit/rollback, exact final value.
         // i % 3 == 0 → rollback (drop), else commit. Exact expectation:
         const N: usize = 1000;
         let b = budget(None, None);

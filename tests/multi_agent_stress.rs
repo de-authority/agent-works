@@ -1,4 +1,5 @@
-//! Stage-4 concurrent stress tests (design doc §12 stage 4: 「并发压测强化」).
+//! Stage-4 concurrent stress tests (design doc §12 stage 4: "concurrent
+//! stress-test hardening").
 //!
 //! Unit-level cleanup tests (`runtime/tests/cleanup.rs`) prove each individual
 //! teardown path is exact; these tests hammer the whole spawn→work→close loop
@@ -7,7 +8,7 @@
 //! return to their expected values — no slot leak, no orphan mailbox, no
 //! phantom reservation.
 //!
-//! Loop counts scale with the profile: the design doc's 「千次」 target runs
+//! Loop counts scale with the profile: the design doc's "1,000-run" target runs
 //! under `cargo test --release`; debug keeps 10× fewer iterations so the
 //! default CI run stays fast.
 
@@ -23,7 +24,7 @@ use agent_base::{Content, Language, StreamChunk, Tool, ToolContext};
 use agent_works::multi_agent::{ChildOutcome, ControlConfig, MultiAgentConfig, MultiAgentRuntime};
 use tokio_util::sync::CancellationToken;
 
-/// 100 rounds in debug (fast CI), 1000 in release (the doc's 千次压测).
+/// 100 rounds in debug (fast CI), 1000 in release (the doc's 1,000-run stress test).
 const ITERS: usize = if cfg!(debug_assertions) { 100 } else { 1000 };
 
 // ── fixtures ───────────────────────────────────────────────────────────────

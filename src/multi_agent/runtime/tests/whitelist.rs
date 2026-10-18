@@ -25,26 +25,6 @@ impl Tool for NoopDecomposeTool {
     }
 }
 
-fn make_runtime_with_tools(
-    business_tools: Vec<Arc<dyn Tool>>,
-    excluded: Vec<String>,
-) -> Arc<MultiAgentRuntime> {
-    let config = MultiAgentConfig {
-        child_excluded_tools: excluded,
-        ..MultiAgentConfig::enabled()
-    };
-    Arc::new(MultiAgentRuntime::new(
-        config,
-        Arc::new(StreamingStub),
-        business_tools,
-        tokio_util::sync::CancellationToken::new(),
-        None,
-        agent_base::Language::En,
-        None,
-        None,
-    ))
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn whitelist_selects_registered_subset() {
     // Case 1 (§5.4): every requested name resolves → spawn succeeds and

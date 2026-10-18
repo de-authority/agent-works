@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "name": "my-tools",
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "search",
+      "form": "wasm",
+      "module": "wasm/search.wasm",
+      "description": "在本地知识库里搜索",
+      "parameters": {
+        "q": { "type": "string", "description": "查询串" }
+      },
+      "capabilities": [{ "type": "fs:read", "paths": ["./data"] }],
+      "timeout_secs": 30
+    },
+    {
+      "name": "deploy",
+      "form": "script",
+      "run": ["scripts/deploy.sh", "${env}"],
+      "description": "部署当前项目到目标环境",
+      "parameters": { "env": { "type": "string", "description": "目标环境" } },
+      "timeout_secs": 120
+    },
+    {
+      "name": "wiki",
+      "form": "mcp",
+      "server": {
+        "command": ["python", "server/main.py"],
+        "env": { "WIKI_TOKEN": "${ENV:WIKI_TOKEN}" }
+      }
+    }
+  ],
+  "skills": ["skills"]
+}

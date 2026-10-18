@@ -72,7 +72,7 @@ pub struct SkillFrontmatter {
     #[serde(default)]
     pub author: Option<String>,
 
-    // ── Agent Skills 开放标准字段 (agentskills.io) ──
+    // ── Agent Skills open-standard fields (agentskills.io) ──
     /// Tools allowed when this skill is active (comma-separated or YAML list).
     /// Empty = all tools allowed.
     #[serde(default, alias = "allowed-tools")]

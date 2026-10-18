@@ -78,7 +78,7 @@ pub enum ChildResultEvent {
     /// One child returned. User-facing progress only — never wakes the
     /// parent agent. Ok results with a wired summarizer are emitted
     /// **twice**: first synchronously with `summary: None` (the plain
-    /// "已返回" notice, the moment the child returns), then once more with
+    /// "returned" notice, the moment the child returns), then once more with
     /// the Focus summary when it lands (no second event on Focus failure).
     /// **Error results are emitted once**, synchronously, with `summary`
     /// carrying the raw first line of the child's error text — the user
@@ -264,7 +264,7 @@ pub fn spawn_watcher(
                             let status = status_str(&r.status);
                             // Focus summarizes for the user, on the main
                             // agent's behalf. Closed needs no LLM call — a
-                            // plain "已关闭" notice is enough. Any Focus
+                            // plain "closed" notice is enough. Any Focus
                             // failure degrades to `None` (plain notice).
                             //
                             // Session 20260903_d8fc41dc: the summarize call
@@ -290,7 +290,7 @@ pub fn spawn_watcher(
                                     // timeout risk on a call that analyzes a
                                     // failure (session 20260906_0f6d4341:
                                     // both Error children surfaced as a
-                                    // terse "执行出错" followed by a vague
+                                    // terse "execution error" followed by a vague
                                     // paraphrase while the raw text went
                                     // only to the parent). The raw first
                                     // line goes out synchronously instead.
@@ -1272,7 +1272,7 @@ mod tests {
     #[tokio::test]
     async fn error_progress_carries_raw_reason_not_a_paraphrase() {
         // Session 20260906_0f6d4341: an Error child used to surface as a
-        // terse "执行出错" plus a detached Focus paraphrase, while the raw
+        // terse "execution error" plus a detached Focus paraphrase, while the raw
         // error ("LLM call failed: HTTP request failed: …") went only to
         // the parent. Now the synchronous Progress must carry the raw
         // first line itself, and Focus must not be called for errors —

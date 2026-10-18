@@ -111,7 +111,8 @@ impl MultiAgentRuntime {
 
         // 3. Live-concurrency gate (design §3.3 gate 3): acquired right
         // after the registry gate, before the build step. Failure rolls back
-        // the registry entry (逆序归还: gate 3 failed → undo gate 2); any
+        // the registry entry (reverse-order release: gate 3 failed → undo
+        // gate 2); any
         // later `Err` in this function returns the slot via the `?` path
         // (local drop), and the ticket with it.
         let slot = match self.limiter.try_acquire() {
@@ -330,7 +331,7 @@ impl MultiAgentRuntime {
     /// `None` is the legacy programmatic path (resolution skips the
     /// capability layer, byte-identical to pre-upgrade behaviour).
     /// Returns a [`SpawnEcho`]: path + actually-registered tools + the
-    /// degradation reason, if any (外部声音发现 9).
+    /// degradation reason, if any (external-voice finding 9).
     #[allow(clippy::too_many_arguments)] // spawn config is naturally positional
     pub async fn spawn_child_with_history(
         &self,
@@ -480,7 +481,7 @@ struct PreparedChild {
     /// child's real capability set (§5.4). Empty for the legacy path's
     /// internal bookkeeping is unused, but always accurate.
     spawned_tools: BTreeSet<String>,
-    /// 能力解析摘要（T6 回显通道）。
+    /// Capability-resolution summary (T6 echo channel).
     resolution: CapabilityResolution,
     /// This spawn's generation (bumped on same-path recycle, see
     /// `child_generations`).
@@ -514,21 +515,23 @@ impl SpawnedChild {
     pub(crate) fn spawned_tools(&self) -> &BTreeSet<String> {
         &self.spawned_tools
     }
-    /// 能力解析摘要（spawn 回显通道，外部声音发现 9）。
+    /// Capability-resolution summary (spawn echo channel, external-voice
+    /// finding 9).
     pub(crate) fn resolution(&self) -> &CapabilityResolution {
         &self.resolution
     }
 }
 
-/// spawn 回显（设计文档 v3 外部声音发现 9）：path + 实际注册工具 + 降级
-/// 摘要。spawn 工具层拼进输出 message，父 agent 看得到降级事实（避免
-/// "假完成"）。
+/// Spawn echo (design doc v3, external-voice finding 9): path + actually
+/// registered tools + the degradation summary. The spawn tool layer splices
+/// it into the output message so the parent agent sees the degradation fact
+/// (avoiding a "fake completion").
 #[derive(Clone, Debug)]
 pub struct SpawnEcho {
     pub agent_path: String,
-    /// 实际注册的工具（post-exclusion）。
+    /// The actually registered tools (post-exclusion).
     pub registered_tools: BTreeSet<String>,
-    /// 降级原因（None = 未降级）。
+    /// Degradation reason (None = not degraded).
     pub degraded_reason: Option<String>,
     /// True when a finished (done/closed) same-path predecessor was
     /// recycled by this spawn (session 20260920_5ba1bed4) — the parent
@@ -553,17 +556,18 @@ pub struct SpawnEcho {
 /// `cancel_all` + abort mechanism §4 relies on — unreachable.
 struct ChildCleanup {
     /// Held for RAII only: dropping the guard releases the live-concurrency
-    /// slot (design §3.2: 额度凭证活在子任务闭包里).
+    /// slot (design §3.2: the quota credential lives in the child task closure).
     _slot: ExecutionSlot,
     mailbox: Arc<MailboxHub>,
     registry: Arc<Mutex<AgentRegistry>>,
     child_cancels: Arc<Mutex<HashMap<AgentPath, CancellationToken>>>,
     path: AgentPath,
-    /// 写门（D6）：drop 时释放该 agent 的全部文件声明。超时 reaper 不走
-    /// 这里（agent 存活，声明继续有效）——只有终局清理释放。
+    /// Write gate (D6): on drop, release every file claim held by this agent.
+    /// The timeout reaper does not come through here (the agent survives, its
+    /// claims stay valid) — only terminal cleanup releases.
     write_gate: Arc<crate::multi_agent::write_gate::WorkspaceWriteGate>,
-    /// 注册工具回显表（T8 接线）：drop 时移除该 agent 的条目，与写门同一
-    /// 终局清理点。
+    /// Registered-tools echo table (T8 wiring): on drop, remove this agent's
+    /// entry — the same terminal cleanup point as the write gate.
     spawned_tools: Arc<Mutex<HashMap<String, Vec<String>>>>,
     /// This spawn's generation plus the generation table (same-path
     /// recycle, session 20260920_5ba1bed4): at drop time, if the table's

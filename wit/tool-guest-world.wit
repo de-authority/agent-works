@@ -1,0 +1,16 @@
+package phi:tool@0.1.0;
+
+// 构建胶水（**不是契约**）：给 host bindgen 与测试夹具用的最小 world。
+//
+// 契约是 `phi-tool.wit` 的 `executor` 接口（P0 签过字的那三样之一）——
+// 接口签名只有一处权威。本文件只是把「导出 executor 的组件」这一形状
+// 起个名字，供 `wasmtime::component::bindgen!` / `wit-bindgen generate!`
+// 引用；将来若要改门面，改的是 phi-tool.wit 的接口，不是这里。
+//
+// 注：解释文字不能放在 `package` 声明正上方——WIT 会当成 package 的
+// doc comment，与 phi-tool.wit 的 doc 相撞（「found doc comments on
+// multiple 'package' items」）。
+
+world tool-guest {
+  export executor;
+}

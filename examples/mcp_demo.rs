@@ -163,9 +163,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Mock server is running on {server_url}\n");
 
     println!("[Step 2] Creating McpTransport and McpServerConfig...");
-    let transport = McpTransport::Http {
-        url: server_url.clone(),
-    };
+    let transport = McpTransport::http(server_url.clone());
     let config = McpServerConfig {
         name: "mock-server".to_string(),
         transport: transport.clone(),
@@ -214,9 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     println!("[Step 5] Using McpHub: add_server + connect_all + discover_all...");
-    let hub_transport = McpTransport::Http {
-        url: server_url.clone(),
-    };
+    let hub_transport = McpTransport::http(server_url.clone());
     let hub_config = McpServerConfig {
         name: "mock-server-via-hub".to_string(),
         transport: hub_transport,

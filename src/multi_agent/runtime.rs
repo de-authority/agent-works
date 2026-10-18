@@ -339,7 +339,7 @@ impl MultiAgentRuntime {
     /// to the timeout — the registry entry's removal is the terminal state
     /// (design §9.2, K3), and `ChildCleanup` releases the registry slot before
     /// the mailbox entry disappears, which makes the close→wait contract
-    /// (§5.2: close 后 wait 得到 Closed) race-free for late pollers.
+    /// (§5.2: after `close`, `wait` gets `Closed`) race-free for late pollers.
     pub async fn wait_for_result(&self, agent_path: Option<&str>, timeout_ms: u64) -> WaitResult {
         let filter_path = match agent_path {
             Some(s) => match AgentPath::parse(s) {
@@ -763,7 +763,7 @@ pub struct AgentInfo {
     #[serde(skip_serializing_if = "is_zero")]
     pub pending_results: usize,
     /// The tools this child was **actually** registered with (post-exclusion,
-    /// post-whitelist; design 2026-09-19 外部声音发现 9 / T8 wiring). Empty
+    /// post-whitelist; design 2026-09-19 external-voice finding 9 / T8 wiring). Empty
     /// for read-only children — the omission IS the fact.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub spawned_tools: Vec<String>,

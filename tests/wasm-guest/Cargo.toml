@@ -1,0 +1,15 @@
+[package]
+name = "plugin-wasm-fixtures"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Test fixtures for the plugin wasm loader (not shipped)"
+
+# 独立小包：只用来产 tests/fixtures/*.wasm 夹具，不进 agent-works 依赖图。
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.62"

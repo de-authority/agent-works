@@ -1,0 +1,27 @@
+// phi:tool —— WASM 工具的标准门（工具插座契约 P0 资产）。
+//
+// 作者故事：依赖本文件 → wit-bindgen（或 cargo-component）生成绑定 →
+// 实现 executor.invoke → `cargo build --target wasm32-wasip2` → 交 .wasm。
+//
+// 演进规则：`phi:tool@0.1.0` 语义化包版本；破坏性变更必须升包版本，
+// 不得原地改签名。宿主侧（wasmtime Component Model 加载器）与作者侧
+// 绑定都以本文件为唯一权威。
+//
+// 运行语义（契约摘要，实现见 agent-works 加载器）：
+//   - host MUST 先按 plugin.json 的 parameters schema 校验 args，
+//     wasm 永不见未校验参数；
+//   - 一模块可导出多个工具，`tool` 参数选择导出内的哪一个；
+//   - 超时/挂起由宿主 epoch interruption 切断，挂工具不挂宿主；
+//   - WASI 0.2 无进程接口：wasm 工具无法起进程，不存在「开关」。
+
+package phi:tool@0.1.0;
+
+interface executor {
+  /// 执行一个工具。
+  ///
+  /// `tool` 为本模块导出的工具名（插件清单里 wasm 条目的 `name`）。
+  /// `args` 为 JSON 文本，且 MUST 已由宿主按 parameters schema 校验完毕。
+  ///
+  /// 返回：成功为 JSON 文本；失败为错误描述串（挂该次调用，不挂进程）。
+  invoke: func(tool: string, args: string) -> result<string, string>;
+}
